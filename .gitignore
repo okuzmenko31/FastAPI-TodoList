@@ -1,0 +1,12 @@
+venv
+*.env
+*.pyc
+*.sqlite
+*.log
+__pycache__
+__pycache__/
+.DS_Store
+celery-beat-schedule
+celery-beat-schedule.db
+.idea
+.vscode
