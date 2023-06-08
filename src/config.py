@@ -1,22 +1,23 @@
 """File with configs and settings for the project"""
-from envparse import Env
-from sqlalchemy.orm import declarative_base
+import os
+from sqlalchemy.ext.declarative import declarative_base
+from dotenv import load_dotenv
 
-env = Env()
+load_dotenv()
 
-DATABASE_URL = env.str(
-    'DATABASE_URL',
-    default='postgresql+asyncpg://postgres:postgres@localhost:5432/postgres'
+DATABASE_URL = os.environ.get(
+    'DATABASE' + '?async_fallback=true',
+    default='postgresql+asyncpg://postgres:postgres@localhost:5432/postgres?async_fallback=true'
 )
 
 
 def get_database_info() -> dict:
     return {
-        'NAME': env.str('DB_NAME', default='db_name'),
-        'USER': env.str('DB_USER', default='postgres'),
-        'PASSWORD': env.str('DB_PASSWORD', default='postgres'),
-        'HOST': env.str('DB_HOST', default='localhost'),
-        'PORT': env.str('DB_PORT', default='5432')
+        'NAME': os.environ.get('DB_NAME', default='db_name'),
+        'USER': os.environ.get('DB_USER', default='postgres'),
+        'PASSWORD': os.environ.get('DB_PASSWORD', default='postgres'),
+        'HOST': os.environ.get('DB_HOST', default='localhost'),
+        'PORT': os.environ.get('DB_PORT', default='5432')
     }
 
 

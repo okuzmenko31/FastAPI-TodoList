@@ -1,9 +1,12 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import Roles, User
-from .services import username_from_email
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, exists
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Union
+
+
+def username_from_email(email: str):
+    return '@' + email.split('@')[0]
 
 
 class UserManager:
@@ -12,12 +15,13 @@ class UserManager:
         self.session = session
 
     async def _check_user_exists(self, username, suffix=None) -> bool:
-        query = select(User).where(User.username == username + str(suffix)).exists()
-        if suffix:
-            query = select(User).where(User.username == username).exists()
-        result = await self.session.execute(query)
-        exists = result.scalar()
-        return exists
+        query = select(User).where(User.username == username + str(suffix))
+        if suffix is not None:
+            query = select(User).where(User.username == username)
+        exist_query = exists(query).select()
+        result = await self.session.execute(exist_query)
+        exists_row = result.fetchone()
+        return exists_row[0]
 
     async def generate_username(self, email: str) -> str:
         if not email:
@@ -36,9 +40,9 @@ class UserManager:
                           name: str,
                           surname: str,
                           email: str,
-                          password: str,
-                          roles: list[Roles]) -> User:
+                          password: str) -> User:
         username = await self.generate_username(email)
+        roles = [Roles.role_user]
         new_user = User(name=name,
                         surname=surname,
                         email=email,

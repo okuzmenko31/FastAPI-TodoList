@@ -1,5 +1,8 @@
 import uuid
-from src.config import Base
+
+from sqlalchemy.ext.declarative import declarative_base
+
+# from src.config import Base
 from sqlalchemy import Column, String, Boolean
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from enum import Enum
@@ -9,6 +12,9 @@ class Roles(str, Enum):
     role_user = 'role_user'
     role_admin = 'role_admin'
     role_superadmin = 'role_superadmin'
+
+
+Base = declarative_base()
 
 
 class User(Base):
