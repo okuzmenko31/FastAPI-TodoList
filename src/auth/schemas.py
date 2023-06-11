@@ -1,17 +1,23 @@
 import re
-from pydantic import BaseModel, EmailStr, validator, validate_email
+import uuid
+
+from pydantic import BaseModel, EmailStr, validator
 from fastapi import HTTPException
+from .services import validate_password
 
 LETTERS_PATTERN = re.compile(r"^[а-яА-Яa-zA-Z\-]+$")
 EN_LOWER_LETTERS_PATTERN = re.compile(r"^[a-z0-9]+$")
 
 
+class MainModel(BaseModel):
+    class Config:
+        orm_mode = True
+
+
 class UserCreate(BaseModel):
-    id: int
     name: str
     surname: str
     email: EmailStr
-    username: str
     password: str
 
     @validator('name')
@@ -32,19 +38,20 @@ class UserCreate(BaseModel):
             )
         return value
 
-    @validator('username')
-    def validate_username(cls, value):
-        if not EN_LOWER_LETTERS_PATTERN.match(value):
+    @validator('password')
+    def validate_password(cls, value):
+        error, success = validate_password(value)
+        print(success, error)
+        if not success and error:
             raise HTTPException(
                 status_code=400,
-                detail='Username should contain only latin letters in'
-                       ' lower case and numbers'
+                detail=error
             )
         return value
 
 
-class UserShow(BaseModel):
-    id: int
+class UserShow(MainModel):
+    id: uuid.UUID
     name: str
     surname: str
     email: EmailStr

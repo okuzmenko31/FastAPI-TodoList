@@ -1,8 +1,10 @@
 from sqlalchemy.ext.asyncio import AsyncSession
+from .hashing import Hashing
 from .models import Roles, User
 from sqlalchemy import select, delete, exists
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Union
+from .schemas import UserCreate, UserShow
 
 
 def username_from_email(email: str):
@@ -80,3 +82,22 @@ class UserManager:
         user_row = result.fetchone()
         if user_row is not None:
             return user_row[0]
+
+
+async def create_new_user(data: UserCreate, session: AsyncSession) -> UserShow:
+    async with session.begin():
+        manager = UserManager(session=session)
+        user = await manager.create_user(
+            name=data.name,
+            surname=data.surname,
+            email=data.email,
+            password=Hashing.get_hashed_password(data.password)
+        )
+        return UserShow(
+            id=user.id,
+            name=user.name,
+            surname=user.surname,
+            username=user.username,
+            email=user.email,
+            is_active=user.is_active
+        )

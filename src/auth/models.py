@@ -29,6 +29,9 @@ class User(Base):
     is_active = Column(Boolean, default=True)
     roles = Column(ARRAY(String), nullable=False)
 
+    def __repr__(self):
+        return f'User: {self.username}'
+
     @property
     def is_superadmin(self) -> bool:
         return Roles.role_superadmin in self.roles

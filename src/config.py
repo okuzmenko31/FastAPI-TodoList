@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATABASE_URL = os.environ.get(
-    'DATABASE' + '?async_fallback=true',
+    'DATABASE_URL',
     default='postgresql+asyncpg://postgres:postgres@localhost:5432/postgres?async_fallback=true'
 )
 

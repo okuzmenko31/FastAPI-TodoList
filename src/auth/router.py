@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .schemas import UserShow, UserCreate
 from src.database import get_database
-from .services import create_new_user
+from .utils import create_new_user
 
 user_app = FastAPI()
 
