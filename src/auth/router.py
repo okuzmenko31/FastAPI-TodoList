@@ -11,7 +11,8 @@ user_app = FastAPI()
 
 @user_app.post('/registration', response_model=UserShow)
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_database)) -> UserShow:
-    if not await check_unique_email(data.email, db):
+    check_email = await check_unique_email(data.email, db)
+    if check_email:
         raise HTTPException(status_code=400, detail='User with provided email exists!')
     try:
         return await create_new_user(data, db)

@@ -19,6 +19,7 @@ class UserCreate(BaseModel):
     surname: str
     email: EmailStr
     password: str
+    password_confirm: str
 
     @validator('name')
     def validate_name(cls, value):
@@ -45,6 +46,15 @@ class UserCreate(BaseModel):
             raise HTTPException(
                 status_code=400,
                 detail=error
+            )
+        return value
+
+    @validator('password_confirm')
+    def validate_password_confirm(cls, value, values):
+        if not value == values.get('password'):
+            raise HTTPException(
+                status_code=400,
+                detail='Password mismatch!'
             )
         return value
 
