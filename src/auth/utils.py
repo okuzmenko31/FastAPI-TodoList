@@ -3,7 +3,7 @@ from .hashing import Hashing
 from .models import Roles, User
 from sqlalchemy import select, delete, exists
 from sqlalchemy.dialects.postgresql import UUID
-from typing import Union
+from typing import Union, NamedTuple, Optional
 from .schemas import UserCreate, UserShow
 
 
@@ -101,3 +101,12 @@ async def create_new_user(data: UserCreate, session: AsyncSession) -> UserShow:
             email=user.email,
             is_active=user.is_active
         )
+
+
+async def check_unique_email(email: str, session: AsyncSession) -> bool:
+    async with session.begin():
+        query = select(User).where(User.email == email)
+        exist_query = exists(query).select()
+        result = await session.execute(exist_query)
+        exists_row = result.fetchone()
+        return exists_row[0]

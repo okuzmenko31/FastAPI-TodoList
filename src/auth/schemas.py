@@ -41,7 +41,6 @@ class UserCreate(BaseModel):
     @validator('password')
     def validate_password(cls, value):
         error, success = validate_password(value)
-        print(success, error)
         if not success and error:
             raise HTTPException(
                 status_code=400,

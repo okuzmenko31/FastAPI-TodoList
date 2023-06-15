@@ -4,13 +4,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .schemas import UserShow, UserCreate
 from src.database import get_database
-from .utils import create_new_user
+from .utils import create_new_user, check_unique_email
 
 user_app = FastAPI()
 
 
 @user_app.post('/registration', response_model=UserShow)
 async def create_user(data: UserCreate, db: AsyncSession = Depends(get_database)) -> UserShow:
+    if not await check_unique_email(data.email, db):
+        raise HTTPException(status_code=400, detail='User with provided email exists!')
     try:
         return await create_new_user(data, db)
     except IntegrityError as error:
