@@ -83,6 +83,12 @@ class UserManager:
         if user_row is not None:
             return user_row[0]
 
+    async def get_all_users(self):
+        query = select(User).filter_by(is_active=True)
+        result = await self.session.execute(query)
+        users_row = result.fetchall()
+        return users_row
+
 
 async def create_new_user(data: UserCreate, session: AsyncSession) -> UserShow:
     async with session.begin():
