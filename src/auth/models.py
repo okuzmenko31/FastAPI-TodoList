@@ -31,7 +31,7 @@ class User(Base):
     name = Column(String, nullable=False)
     surname = Column(String, nullable=False)
     hashed_password = Column(String, nullable=False)
-    is_active = Column(Boolean, default=True)
+    is_active = Column(Boolean, default=False)
     roles = Column(ARRAY(String), nullable=False)
 
     def __repr__(self):

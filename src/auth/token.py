@@ -1,14 +1,17 @@
 """
-This idea of token is taken from my another project.
+The idea of token is taken from my another project.
 
 Link: https://github.com/okuzmenko31/drf-ecommerce/blob/main/ecommerce/apps/users/token.py
 """
 import binascii
 import os
+from src import config
 from sqlalchemy import select, exists, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import AuthToken
 from typing import NamedTuple, Optional
+from jinja2 import Environment, select_autoescape, PackageLoader
+from fastapi_mail import FastMail, MessageSchema, ConnectionConfig
 
 MESSAGES = {
     'token_miss_error': ('This token does not exist or belongs '
@@ -87,7 +90,88 @@ class MailContextMixin:
         return context
 
 
-class AuthTokenManager(MailContextMixin):
+env = Environment(
+    loader=PackageLoader('src', 'templates'),
+    autoescape=select_autoescape(['html', 'xml'])
+)
+
+
+class SendEmailMixin:
+    def __init__(self, email: str, url: str):
+        self.email = email
+        self.url = url
+
+    async def maker_send_mail(self, subject, template):
+        # Define the config
+        conf = ConnectionConfig(
+            MAIL_USERNAME=config.SMTP_USERNAME,
+            MAIL_PASSWORD=config.SMTP_PASSWORD,
+            MAIL_FROM=config.SMTP_USER,
+            MAIL_PORT=config.SMTP_PORT,
+            MAIL_SERVER=config.SMTP_HOST,
+            MAIL_STARTTLS=True,
+            MAIL_SSL_TLS=False,
+            USE_CREDENTIALS=True,
+            VALIDATE_CERTS=True
+        )
+        # Generate the HTML template based on the template name
+        template = env.get_template(f'{template}.html')
+
+        html = template.render(
+            username=self.email,
+            url=self.url,
+            subject=subject
+        )
+
+        # Define the message options
+        message = MessageSchema(
+            subject=subject,
+            recipients=[self.email],
+            body=html,
+            subtype="html"
+        )
+
+        # Send the email
+        fm = FastMail(conf)
+        await fm.send_message(message)
+
+    async def send_mail(self, subject):
+        await self.maker_send_mail(subject, 'verification')
+
+
+class AuthTokenQueryMixin:
+    """
+    Mixin which is responsible for returning
+    query for token instance.
+    """
+    query = None
+    __statement = None
+
+    async def query_by_token_email(self,
+                                   statement,
+                                   email: Optional[str] = None,
+                                   token: Optional[str] = None,
+                                   token_type: Optional[str] = None):
+        stmt = statement
+        if email is not None and token is None:
+            self.query = stmt.filter_by(token_owner=email, token_type=token_type)
+        elif token is not None and email is None:
+            self.query = stmt.filter_by(token=token)
+        elif email is not None and token is not None:
+            self.query = stmt.filter_by(token=token, token_owner=email)
+        return self.query
+
+    @property
+    async def select_stmt(self):
+        return select(AuthToken)
+
+    @property
+    async def delete_stmt(self):
+        return delete(AuthToken)
+
+
+class AuthTokenManager(AuthTokenQueryMixin,
+                       MailContextMixin):
     """
     Mixin for creating and sending tokenized email.
 
@@ -98,11 +182,10 @@ class AuthTokenManager(MailContextMixin):
         - Password reset ['pr']
 
     Attributes:
-        token_type (str): The token type to create.
-        html_message_template (str): The path to the HTML message template.
+        token_type (str): the token type to create.
+        mail_with_celery (bool): setting which can help you to send emails with celery.
     """
     token_type = None
-    html_message_template = None
     mail_with_celery = False
 
     def __init__(self, session: AsyncSession):
@@ -111,13 +194,24 @@ class AuthTokenManager(MailContextMixin):
     async def check_token_exists(self,
                                  email: Optional[str] = None,
                                  token: Optional[str] = None) -> bool:
-        query = None
-        if email is not None and token is None:
-            query = select(AuthToken).filter_by(token_owner=email, token_type=self.token_type)
-        elif token is not None and email is None:
-            query = select(AuthToken).filter_by(token=token)
-        elif email is not None and token is not None:
-            query = select(AuthToken).filter_by(token=token, token_owner=email)
+        """
+        Checks the token instance by provided
+        token value or email of token owner.
+        You can specify them together. Return
+        True if token exists or not in another case.
+
+        Args:
+            email (str): email of token owner.
+            token (str): string token value.
+        Returns:
+            True or False.
+        """
+        query = await self.query_by_token_email(
+            statement=await self.select_stmt,
+            email=email,
+            token=token,
+            token_type=self.token_type
+        )
         exists_query = exists(query).select()
         result = await self.session.execute(exists_query)
         exists_row = result.fetchone()
@@ -134,6 +228,17 @@ class AuthTokenManager(MailContextMixin):
         return token
 
     async def token_create(self, email: str) -> AuthToken:
+        """
+        Creates token instance by provided
+        email of token owner. Returns created
+        instance of token.
+
+        Args:
+            email (str): email of token owner.
+
+        Returns:
+            Created token instance.
+        """
         token_value = await self.generate_unique_token()
         new_token = AuthToken(
             token=token_value,
@@ -144,9 +249,24 @@ class AuthTokenManager(MailContextMixin):
         await self.session.flush()
         return new_token
 
-    async def delete_exists_token(self, email: str) -> None:
-        query = delete(AuthToken).filter_by(token_owner=email,
-                                            token_type=self.token_type)
+    async def delete_exists_token(self,
+                                  email: Optional[str] = None,
+                                  token: Optional[str] = None):
+        """
+        Deletes the token instance by provided
+        token value or email of token owner.
+        You can specify them together.
+
+        Args:
+            email (str): email of token owner.
+            token (str): string token value.
+        """
+        query = await self.query_by_token_email(
+            statement=await self.delete_stmt,
+            email=email,
+            token=token,
+            token_type=self.token_type
+        )
         await self.session.execute(query)
 
     async def _create_token(self, email: str) -> TokenData:
@@ -164,8 +284,84 @@ class AuthTokenManager(MailContextMixin):
             token = await self.token_create(email)
         else:
             try:
-                await self.delete_exists_token(email)
-                token = self.token_create(email)
+                await self.delete_exists_token(email=email)
+                token = await self.token_create(email)
             except (Exception,):
                 return TokenData(error=MESSAGES['token_miss_error'])
         return TokenData(token=token)
+
+    async def send_tokenized_mail(self, email: str) -> str:
+        """
+        Method that calls the `_create_token` method to generate
+        a token for the given email address, creates a context
+        for an email and sends it to the user's email address.
+        Returns a success message upon successful email delivery
+        or an error message if an error occurs.
+
+        Args:
+            email (str): The email address to which the token email will be sent
+        Returns:
+            A success message upon successful email delivery
+            or an error message if an error occurs.
+        """
+        mail_context = await self.get_context(token_type=self.token_type)
+        token_data = await self._create_token(email)
+
+        if token_data.error:
+            return token_data.error
+
+        subject = mail_context['subject']
+        url = 'http' + '://127.0.0.1:8000' + f'/confirm_email_reg/{token_data.token.token}/{email}'
+        mail_mixin = SendEmailMixin(email=email,
+                                    url=url)
+        if self.mail_with_celery:
+            pass
+        else:
+            await mail_mixin.send_mail(subject)
+        return mail_context['success_message']
+
+
+async def get_token_by_params(token_value: str, token_owner: str, session: AsyncSession):
+    """
+    Returns token instance by provided token_value,
+    toke_owner and session.
+
+    Args:
+        token_value (str): string value of the token.
+        token_owner (str): email address of token owner.
+        session (AsyncSession): AsyncSession instance.
+    Returns:
+        Token instance or None.
+    """
+    query = select(AuthToken).filter_by(token=token_value, token_owner=token_owner)
+    result = await session.execute(query)
+    token_row = result.fetchone()
+    if token_row is not None:
+        token = token_row[0]
+        return token
+
+
+async def get_token_data(token: str, email: str, session: AsyncSession) -> TokenData:
+    """
+    Function for getting token data.
+
+    Args:
+        token (str): The token string to retrieve.
+        email (str): The email of the token owner.
+        session (AsyncSession): session object.
+
+    Returns:
+        The TokenData object with either the token or an error message.
+
+    Raises:
+        Token.DoesNotExist: If the token does not exist.
+    """
+    token_manager = AuthTokenManager(session=session)
+    exist = await token_manager.check_token_exists(email, token)
+    if not exist:
+        return TokenData(error=MESSAGES['token_miss_error'])
+    token = await get_token_by_params(token_value=token, token_owner=email, session=session)
+    if token.expired:
+        return TokenData(error=MESSAGES['token_expired_error'])
+    await token_manager.delete_exists_token(token=token.token)
+    return TokenData(token=token)

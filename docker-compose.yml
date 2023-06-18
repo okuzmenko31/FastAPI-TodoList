@@ -1,0 +1,80 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:15-alpine
+    restart: always
+    container_name: db_psql
+    volumes:
+      - psql_data:/var/lib/postgresql/data
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST: ${DB_HOST}
+      POSTGRES_PORT: ${DB_PORT}
+      TZ: 'Europe/Kiev'
+
+  app:
+    build:
+      context: .
+    container_name: todolist_app
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - .:/todolist_app
+    env_file:
+      - .env
+    depends_on:
+      - db
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_HOST: ${DB_HOST}
+      POSTGRES_PORT: ${DB_PORT}
+
+
+  redis:
+    image: redis:alpine
+    restart: always
+    container_name: redis
+    hostname: redis
+    ports:
+      - "6379:6379"
+
+  celery:
+    build:
+      context: .
+    container_name: celery_workers
+    restart: always
+    entrypoint: celery
+    command: -A src worker -B --loglevel=info
+    volumes:
+      - .:/todolist_app
+    depends_on:
+      - redis
+      - app
+      - db
+
+  flower:
+    build:
+      context: .
+    container_name: flower_app
+    restart: always
+    depends_on:
+      - redis
+      - db
+      - app
+    volumes:
+      - .:/todolist_app
+    ports:
+      - "8888:5555"
+
+
+
+volumes:
+  psql_data:
