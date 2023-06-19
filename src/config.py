@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+SECRET_KEY = os.environ.get('SECRET_KEY', 'your_secret_key')
+
 DATABASE_URL = os.environ.get(
     'DATABASE_URL',
     default='postgresql+asyncpg://postgres:postgres@localhost:5432/postgres?async_fallback=true'

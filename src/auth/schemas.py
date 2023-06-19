@@ -1,5 +1,6 @@
 import re
 import uuid
+from typing import Union
 
 from pydantic import BaseModel, EmailStr, validator
 from fastapi import HTTPException
@@ -66,3 +67,12 @@ class UserShow(MainModel):
     email: EmailStr
     username: str
     is_active: bool
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+
+class TokenData(BaseModel):
+    username: Union[str, None] = None

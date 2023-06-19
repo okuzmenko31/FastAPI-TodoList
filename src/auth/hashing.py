@@ -1,6 +1,6 @@
 from passlib.context import CryptContext
 
-hash_content = CryptContext(schemes=['sha256_crypt'])
+hash_content = CryptContext(schemes=['bcrypt'])
 
 
 class Hashing:

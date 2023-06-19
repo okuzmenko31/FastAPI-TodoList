@@ -1,10 +1,18 @@
+from datetime import datetime, timedelta
+
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from .hashing import Hashing
 from .models import Roles, User
 from sqlalchemy import select, delete, exists
 from sqlalchemy.dialects.postgresql import UUID
-from typing import Union, NamedTuple, Optional
-from .schemas import UserCreate, UserShow
+from typing import Union
+from .schemas import UserCreate, UserShow, TokenData
+from src.config import SECRET_KEY
+from ..database import get_database
 
 
 def username_from_email(email: str):
@@ -116,3 +124,59 @@ async def check_unique_email(email: str, session: AsyncSession) -> bool:
         result = await session.execute(exist_query)
         exists_row = result.fetchone()
         return exists_row[0]
+
+
+async def authenticate_user(username: str,
+                            password: str,
+                            session: AsyncSession = Depends(get_database)):
+    manager = UserManager(session=session)
+    async with session.begin():
+        user = await manager.get_user_by_username(username=username)
+        if not user:
+            return False
+        if not Hashing.verify_password(password=password, hashed_password=user.hashed_password):
+            return False
+        return user
+
+
+async def create_access_token(data: dict, expires_delta: Union[timedelta, None] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm='HS256')
+    return encoded_jwt
+
+
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+async def get_current_user(session: AsyncSession = Depends(get_database),
+                           token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
+        username: str = payload.get('sub')
+        if username is None:
+            raise credentials_exception
+        token_data = TokenData(username=username)
+    except JWTError:
+        raise credentials_exception
+    manager = UserManager(session=session)
+    async with session.begin():
+        user = await manager.get_user_by_username(username=token_data.username)
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+async def get_current_active_user(current_user=Depends(get_current_user)):
+    if not current_user.is_active:
+        raise HTTPException(status_code=400, detail='Inactive user')
+    return current_user
