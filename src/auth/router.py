@@ -5,18 +5,23 @@ from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing_extensions import Annotated
 
 from .schemas import UserShow, UserCreate, Token
 from src.database import get_database
-from .utils import create_new_user, check_unique_email, UserManager, get_current_user, authenticate_user, \
-    get_current_active_user, create_access_token
+from .utils import (create_new_user,
+                    check_unique_email,
+                    UserManager,
+                    authenticate_user,
+                    get_current_active_user,
+                    create_access_token,
+                    add_jwt_token_to_blacklist,
+                    get_token_user)
 from .token import AuthTokenManager, get_token_data
 
 user_app = FastAPI()
 
 
-@user_app.post('/registration', response_model=UserShow)
+@user_app.post('/registration/', response_model=UserShow)
 async def create_user(data: UserCreate, session: AsyncSession = Depends(get_database)) -> UserShow:
     check_email = await check_unique_email(data.email, session)
     if check_email:
@@ -31,7 +36,7 @@ async def create_user(data: UserCreate, session: AsyncSession = Depends(get_data
         raise HTTPException(status_code=503, detail=f'Database error: {error}')
 
 
-@user_app.post('/confirm_email_reg/{token}/{email}')
+@user_app.post('/confirm_email_reg/{token}/{email}/')
 async def confirm_email_and_register(token: str,
                                      email: str,
                                      session: AsyncSession = Depends(get_database)) -> Union[UserShow, str]:
@@ -56,7 +61,7 @@ async def confirm_email_and_register(token: str,
         )
 
 
-@user_app.post('/token', response_model=Token)
+@user_app.post('/token/', response_model=Token)
 async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(),
                                  session: AsyncSession = Depends(get_database)):
     user = await authenticate_user(session=session,
@@ -74,12 +79,25 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
     return {'access_token': access_token, 'token_type': 'bearer'}
 
 
-@user_app.get("/users/me/", response_model=UserShow)
+@user_app.get('/logout/')
+async def logout(session: AsyncSession = Depends(get_database),
+                 token: str = Depends(get_token_user),
+                 current_user=Depends(get_current_active_user)):
+    await add_jwt_token_to_blacklist(session=session,
+                                     token=token,
+                                     email=current_user.email)
+    return {
+        'status_code': status.HTTP_200_OK,
+        'detail': 'You successfully logged out.'
+    }
+
+
+@user_app.get("/me/", response_model=UserShow)
 async def read_users_me(current_user=Depends(get_current_active_user)):
     return current_user
 
 
-@user_app.get('/users', response_model=list[UserShow])
+@user_app.get('/users/', response_model=list[UserShow])
 async def get_all_users(session: AsyncSession = Depends(get_database)) -> list[UserShow]:
     manager = UserManager(session)
     async with session.begin():

@@ -6,7 +6,7 @@ from jose import jwt, JWTError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .hashing import Hashing
-from .models import Roles, User
+from .models import Roles, User, JwtTokensBlackList
 from sqlalchemy import select, delete, exists
 from sqlalchemy.dialects.postgresql import UUID
 from typing import Union
@@ -165,6 +165,10 @@ async def get_current_user(session: AsyncSession = Depends(get_database),
         username: str = payload.get('sub')
         if username is None:
             raise credentials_exception
+        token_in_black_list = await find_black_list_token(token=token,
+                                                          session=session)
+        if token_in_black_list:
+            raise credentials_exception
         token_data = TokenData(username=username)
     except JWTError:
         raise credentials_exception
@@ -180,3 +184,26 @@ async def get_current_active_user(current_user=Depends(get_current_user)):
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail='Inactive user')
     return current_user
+
+
+async def add_jwt_token_to_blacklist(token: str,
+                                     email: str,
+                                     session: AsyncSession):
+    blacklist_token = JwtTokensBlackList(token=token, email=email)
+    async with session.begin():
+        session.add(blacklist_token)
+        await session.flush()
+
+
+async def find_black_list_token(token: str,
+                                session: AsyncSession):
+    query = select(JwtTokensBlackList).where(JwtTokensBlackList.token == token)
+    exist_query = exists(query).select()
+    async with session.begin():
+        result = await session.execute(exist_query)
+        exists_row = result.fetchone()
+        return exists_row[0]
+
+
+async def get_token_user(token: str = Depends(oauth2_scheme)):
+    return token

@@ -78,3 +78,17 @@ class AuthToken(Base):
 
     def __repr__(self):
         return f'TOKEN: {self.token}, OWNER: {self.token_owner}'
+
+
+class JwtTokensBlackList(Base):
+    __tablename__ = 'jwt_tokens_blacklist'
+    id = Column(UUID(as_uuid=True),
+                primary_key=True,
+                default=uuid.uuid4)
+    token = Column(String(length=150),
+                   unique=True,
+                   nullable=False)
+    email = Column(String(length=150), nullable=False)
+
+    def __repr__(self):
+        return f'BLACKLIST TOKEN: {self.token}, OWNER: {self.email}'
