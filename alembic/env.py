@@ -8,7 +8,8 @@ from sqlalchemy import pool
 from alembic import context
 
 from src.config import get_database_info
-from src.auth.models import Base
+from src.auth.models import Base as UserBase
+from src.tasks.models import Base as TasksBase
 
 sys.path.append(os.path.join(sys.path[0], 'src'))
 
@@ -32,7 +33,9 @@ if config.config_file_name is not None:
 # for 'autogenerate' support
 # from myapp import mymodel
 # target_metadata = mymodel.Base.metadata
-target_metadata = Base.metadata
+
+base_metadata_lst = [UserBase.metadata, TasksBase.metadata]
+target_metadata = base_metadata_lst
 
 # url = os.environ.get('DATABASE_URL', config.get_main_option("sqlalchemy.url"))
 

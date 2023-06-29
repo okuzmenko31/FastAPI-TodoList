@@ -12,7 +12,7 @@ from sqlalchemy.dialects.postgresql import UUID
 from typing import Union
 from .schemas import UserCreate, UserShow, TokenData
 from src.config import SECRET_KEY
-from ..database import get_database
+from src.database.core import get_database
 
 
 def username_from_email(email: str):
@@ -133,6 +133,8 @@ async def authenticate_user(username: str,
     async with session.begin():
         user = await manager.get_user_by_username(username=username)
         if not user:
+            return False
+        if not user.is_active:
             return False
         if not Hashing.verify_password(password=password, hashed_password=user.hashed_password):
             return False

@@ -2,9 +2,11 @@ import uuid
 import sqlalchemy.types as types
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, String, Boolean, DateTime
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 from enum import Enum
+from src.database.core import Base
 
 
 class Roles(str, Enum):
@@ -13,13 +15,13 @@ class Roles(str, Enum):
     role_superadmin = 'role_superadmin'
 
 
-Base = declarative_base()
+# Base = declarative_base()
 
 
 class User(Base):
     __tablename__ = 'users'
 
-    id = Column(UUID(as_uuid=True),
+    id = Column(UUID(as_uuid=True),  # as_uuid helps us to return python uuid
                 primary_key=True,
                 default=uuid.uuid4)
     username = Column(String,
@@ -33,6 +35,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     is_active = Column(Boolean, default=False)
     roles = Column(ARRAY(String), nullable=False)
+    tasks = relationship('Tasks', back_populates='creator')
 
     def __repr__(self):
         return f'User: {self.username}'
